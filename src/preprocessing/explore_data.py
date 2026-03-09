@@ -130,7 +130,7 @@ def explore_ecsf(filepath):
                     for field in fields:
                         for other_key in all_keys:
                             if other_key != key and other_key in field.lower():
-                                print(f"   🔗 '{key}' has field '{field}' - possible link to '{other_key}'")
+                                print(f"   🔗 '{key}' has field '{field}' - link to '{other_key}'")
     
     return data
 
@@ -161,24 +161,23 @@ def explore_job_postings(filepath):
         print("\n🔍 Column Data Types:")
         print(df.dtypes)
         
-        print("\n⚠️  Missing Values:")
-        missing = df.isnull().sum()
-        if missing.sum() > 0:
-            print(missing[missing > 0])
-        else:
-            print("  No missing values")
+        # Check for empty string values across all columns
+        print("\n⚠️  Empty String Values (null values):")
+        empty_strings_found = False
+        for col in df.columns:
+            if df[col].dtype == 'object':  # Only check string columns
+                empty_count = (df[col].str.strip() == '').sum()
+                if empty_count > 0:
+                    empty_strings_found = True
+                    percentage = (empty_count / len(df)) * 100
+                    print(f"  - {col}: {empty_count} empty strings ({percentage:.1f}%)")
+        
+        if not empty_strings_found:
+            print("  No empty string values found")
         
         print("\n🔄 Duplicate Records:")
         duplicates = df.duplicated().sum()
         print(f"  {duplicates} duplicate rows")
-        
-        # Check for ID column
-        id_cols = [col for col in df.columns if 'id' in col.lower()]
-        if id_cols:
-            print(f"\n🔑 Unique IDs in '{id_cols[0]}': {df[id_cols[0]].nunique()}")
-            duplicate_ids = df[id_cols[0]].duplicated().sum()
-            if duplicate_ids > 0:
-                print(f"  ⚠️  Warning: {duplicate_ids} duplicate IDs found!")
         
         print("\n👁️  Sample Records (first 2):")
         for i, record in enumerate(df.head(2).to_dict('records')):
@@ -202,6 +201,24 @@ def explore_job_postings(filepath):
         if location_cols:
             print(f"\n🌍 Location Distribution (top 10 in '{location_cols[0]}'):")
             print(df[location_cols[0]].value_counts().head(10))
+        
+        # Check for status/state columns
+        status_cols = [col for col in df.columns if col == 'Job State']
+        if status_cols:
+            for col in status_cols:
+                print(f"\n📌 Status Distribution ('{col}'):")
+                print(df[col].value_counts())
+                
+                # Check for non-LISTED statuses
+                non_listed = df[df[col] != 'LISTED']
+                if len(non_listed) > 0:
+                    print(f"\n⚠️  Found {len(non_listed)} records with status != 'LISTED':")
+                    print(non_listed[col].value_counts())
+                    print("\n  Sample non-LISTED records:")
+                    for idx, record in non_listed.head(3).iterrows():
+                        print(f"    - ID: {record.get('id', record.get('Id', 'N/A'))}, Status: {record[col]}")
+                else:
+                    print(f"  ✅ All records have status = 'LISTED'")
         
     elif isinstance(data, dict):
         print(f"📊 Top-level keys: {list(data.keys())}")
