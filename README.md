@@ -71,6 +71,10 @@ docker-compose exec app python src/preprocessing/explore_data.py --language-mode
 
 # Data preprocessing
 docker-compose exec app python src/preprocessing/preprocess_data.py
+
+# Minimal webapp
+docker-compose exec app python webapp/app.py
+# Open: http://localhost:5000
 ```
 
 ### Database Access

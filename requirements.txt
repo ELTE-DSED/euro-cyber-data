@@ -1,5 +1,6 @@
 # Core
 python-dotenv==1.0.0
+Flask==3.0.2
 
 # Database
 psycopg2-binary==2.9.9
