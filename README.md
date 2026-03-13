@@ -48,7 +48,7 @@ cp .env.example .env
 # Build Docker images
 docker-compose build
 
-# Start services (PostgreSQL + app container)
+# Start services (PostgreSQL/pgAdmin + app container)
 docker-compose up -d
 
 # Check status
@@ -78,6 +78,21 @@ docker-compose exec app python src/preprocessing/preprocess_data.py
 # Connect to PostgreSQL
 docker-compose exec postgres psql -U postgres -d euro_cyber_db
 ```
+
+### pgAdmin Web UI
+
+Open http://localhost:5050 and log in with:
+
+- Email: value of `PGADMIN_DEFAULT_EMAIL` (default: `admin@local.dev`)
+- Password: value of `PGADMIN_DEFAULT_PASSWORD` (default: `admin`)
+
+Then add a new server in pgAdmin:
+
+- Host name/address: `postgres`
+- Port: `5432`
+- Maintenance DB: `euro_cyber_db`
+- Username: `postgres`
+- Password: `postgres`
 
 ### Clean Restart
 ```bash

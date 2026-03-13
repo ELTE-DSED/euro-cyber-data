@@ -43,9 +43,27 @@ services:
       - euro-cyber-network
     command: tail -f /dev/null
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: euro-cyber-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@local.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - euro-cyber-network
+
 networks:
   euro-cyber-network:
     driver: bridge
 
 volumes:
   postgres_data:
+  pgadmin_data:
