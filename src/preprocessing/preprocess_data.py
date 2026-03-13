@@ -13,6 +13,18 @@ import sys
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.utils.config import RAW_DATA_DIR, PREPROCESSED_DATA_DIR
+from src.preprocessing.language_detection import detect_language_distribution
+
+
+def get_language_check(df, field='Description', mode='sample', sample_size=500):
+    """Reusable language check for preprocessing decisions."""
+    if field not in df.columns:
+        return None
+    return detect_language_distribution(
+        df[field],
+        mode=mode,
+        sample_size=sample_size,
+    )
 
 
 def preprocess_ecsf(data):

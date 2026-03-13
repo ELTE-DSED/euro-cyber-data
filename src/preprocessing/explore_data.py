@@ -7,19 +7,19 @@ quality, and characteristics before preprocessing.
 import json
 import pandas as pd
 from pathlib import Path
-from collections import Counter
+import argparse
 import sys
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.utils.config import RAW_DATA_DIR
+from src.preprocessing.language_detection import (
+    LANGDETECT_AVAILABLE,
+    detect_language_distribution,
+    invalid_content_mask,
+)
 
-# Language detection
-try:
-    from langdetect import detect, LangDetectException
-    LANGDETECT_AVAILABLE = True
-except ImportError:
-    LANGDETECT_AVAILABLE = False
+if not LANGDETECT_AVAILABLE:
     print("⚠️  Warning: langdetect not installed. Language detection will be skipped.")
 
 
@@ -139,7 +139,7 @@ def explore_ecsf(filepath):
     return data
 
 
-def explore_job_postings(filepath):
+def explore_job_postings(filepath, language_mode='sample', language_sample_size=500):
     """Explore Job Postings data structure"""
     print("\n\n" + "=" * 80)
     print("JOB POSTINGS DATA EXPLORATION")
@@ -164,10 +164,9 @@ def explore_job_postings(filepath):
         # Check for empty string values across all columns
         print("\n⚠️  Missing Values (invalid content):")
         empty_strings_found = False
-        invalid_values = {'', ' ', 'N/A', 'None', 'none', 'n/a', 'null', 'NULL'}
         for col in df.columns:
             if df[col].dtype == 'object':  # Only check string columns
-                empty_count = (df[col].str.strip().isin(invalid_values)).sum()
+                empty_count = invalid_content_mask(df[col]).sum()
                 if empty_count > 0:
                     empty_strings_found = True
                     percentage = (empty_count / len(df)) * 100
@@ -239,9 +238,8 @@ def explore_job_postings(filepath):
                 print(f"\n📌 Field: '{field}'")
                 
                 # Count nulls and empty/invalid strings
-                invalid_values = {'', ' ', 'N/A', 'None', 'none', 'n/a', 'null', 'NULL'}
                 null_count = df[field].isna().sum()
-                empty_count = (df[field].str.strip().isin(invalid_values)).sum() if df[field].dtype == 'object' else 0
+                empty_count = invalid_content_mask(df[field]).sum() if df[field].dtype == 'object' else 0
                 total_missing = null_count + empty_count
                 valid_count = len(df) - total_missing
                 
@@ -260,10 +258,9 @@ def explore_job_postings(filepath):
             print("🚨 RECORDS WITH ALL CRITICAL FIELDS EMPTY")
             print("=" * 80)
             
-            invalid_values = {'', ' ', 'N/A', 'None', 'none', 'n/a', 'null', 'NULL'}
             mask = pd.Series([True] * len(df), index=df.index)
             for col in all_critical_cols:
-                mask = mask & (df[col].str.strip().isin(invalid_values))
+                mask = mask & invalid_content_mask(df[col])
             
             all_empty = df[mask]
             print(f"\n  Fields checked: {all_critical_cols}")
@@ -283,9 +280,8 @@ def explore_job_postings(filepath):
             print("⚠️  RECORDS WITH SKILL AND DESCRIPTION BOTH INVALID")
             print("=" * 80)
 
-            invalid_values = {'', ' ', 'N/A', 'None', 'none', 'n/a', 'null', 'NULL'}
-            skill_invalid = df['Skill'].str.strip().isin(invalid_values)
-            desc_invalid = df['Description'].str.strip().isin(invalid_values)
+            skill_invalid = invalid_content_mask(df['Skill'])
+            desc_invalid = invalid_content_mask(df['Description'])
 
             print(f"\n  Records with BOTH Skill and Description invalid: {(skill_invalid & desc_invalid).sum()} ({((skill_invalid & desc_invalid).sum()/len(df)*100):.2f}%)")
             print(f"  Records with only Skill invalid:                  {(skill_invalid & ~desc_invalid).sum()} ({((skill_invalid & ~desc_invalid).sum()/len(df)*100):.2f}%)")
@@ -303,6 +299,9 @@ def explore_job_postings(filepath):
             print("\n" + "=" * 80)
             print("🌐 LANGUAGE DETECTION")
             print("=" * 80)
+            print(f"  Mode: {language_mode}")
+            if language_mode == 'sample':
+                print(f"  Sample size per field: {language_sample_size}")
             
             # Fields to check for language
             fields_to_check = ['Title', 'Description', 'Primary Description', 'Skill']
@@ -310,27 +309,19 @@ def explore_job_postings(filepath):
             
             for field in existing_fields:
                 print(f"\n📝 Detecting language in '{field}'...")
-                
-                # Sample detection (check first 500 non-empty records for speed)
-                sample_size = min(500, len(df))
-                invalid_values = {'', ' ', 'N/A', 'None', 'none', 'n/a', 'null', 'NULL'}
-                non_empty = df[~df[field].str.strip().isin(invalid_values)][field].head(sample_size)
-                
-                if len(non_empty) == 0:
+
+                result = detect_language_distribution(
+                    df[field],
+                    mode=language_mode,
+                    sample_size=language_sample_size,
+                )
+
+                total_sampled = result['sampled_records']
+                if total_sampled == 0:
                     print(f"  ⚠️  No valid text to detect language")
                     continue
-                
-                detected_langs = []
-                for text in non_empty:
-                    try:
-                        lang = detect(str(text))
-                        detected_langs.append(lang)
-                    except LangDetectException:
-                        detected_langs.append('unknown')
-                
-                # Count languages
-                lang_counts = Counter(detected_langs)
-                total_sampled = len(detected_langs)
+
+                lang_counts = result['language_counts']
                 
                 print(f"  Sampled {total_sampled} records:")
                 for lang, count in lang_counts.most_common():
@@ -339,8 +330,8 @@ def explore_job_postings(filepath):
                     print(f"    {emoji} {lang}: {count} ({percentage:.1f}%)")
                 
                 # Check if mostly English
+                en_percentage = result['english_percentage']
                 en_count = lang_counts.get('en', 0)
-                en_percentage = (en_count / total_sampled) * 100
                 
                 if en_percentage < 90:
                     non_en_count = total_sampled - en_count
@@ -365,6 +356,25 @@ def explore_job_postings(filepath):
 
 def main():
     """Main exploration function"""
+    parser = argparse.ArgumentParser(description='Explore ECSF and job posting raw data.')
+    parser.add_argument(
+        '--language-mode',
+        choices=['sample', 'full'],
+        default='sample',
+        help="Language detection mode: 'sample' (default) or 'full'."
+    )
+    parser.add_argument(
+        '--sample-size',
+        type=int,
+        default=500,
+        help='Sample size per field when --language-mode=sample (default: 500).'
+    )
+    args = parser.parse_args()
+
+    if args.sample_size <= 0:
+        print('❌ sample-size must be greater than 0')
+        return
+
     print("\n🔍 Starting Data Exploration...\n")
     
     # File paths
@@ -383,7 +393,11 @@ def main():
     # Explore both datasets
     try:
         ecsf_data = explore_ecsf(ecsf_file)
-        job_data = explore_job_postings(job_postings_file)
+        job_data = explore_job_postings(
+            job_postings_file,
+            language_mode=args.language_mode,
+            language_sample_size=args.sample_size,
+        )
         
         print("\n\n" + "=" * 80)
         print("✅ EXPLORATION COMPLETE")
