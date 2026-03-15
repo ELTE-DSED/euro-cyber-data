@@ -13,6 +13,9 @@ import sys
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.utils.config import RAW_DATA_DIR
+from src.preprocessing.invalid_record_detection import (
+    find_all_critical_fields_invalid_records,
+)
 from src.preprocessing.language_detection import (
     LANGDETECT_AVAILABLE,
     detect_language_distribution,
@@ -252,17 +255,12 @@ def explore_job_postings(filepath, language_mode='sample', language_sample_size=
                     print(f"  ⚠️  Warning: {total_missing} records missing critical field '{field}'")
         
         # Records where ALL critical fields are empty
-        all_critical_cols = [f for f in ['Title', 'Description', 'Primary Description', 'Skill'] if f in df.columns]
+        all_empty, all_critical_cols = find_all_critical_fields_invalid_records(df)
         if all_critical_cols:
             print("\n" + "=" * 80)
             print("🚨 RECORDS WITH ALL CRITICAL FIELDS EMPTY")
             print("=" * 80)
-            
-            mask = pd.Series([True] * len(df), index=df.index)
-            for col in all_critical_cols:
-                mask = mask & invalid_content_mask(df[col])
-            
-            all_empty = df[mask]
+
             print(f"\n  Fields checked: {all_critical_cols}")
             print(f"  Records with ALL fields empty: {len(all_empty)} ({(len(all_empty)/len(df)*100):.2f}%)")
             
