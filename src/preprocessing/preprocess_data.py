@@ -32,14 +32,11 @@ def preprocess_ecsf(data):
     Preprocess ECSF data
     
     TODO: Implement based on exploration findings
-    - Remove duplicates
     - Standardize field names
-    - Handle missing values
     - Extract relevant fields
     """
     print("🔧 Preprocessing ECSF data...")
     
-    # Placeholder - implement after exploration
     pass
 
 
@@ -48,7 +45,6 @@ def preprocess_job_postings(data):
     Preprocess Job Postings data
     
     TODO: Implement based on exploration findings
-    - Remove duplicates
     - Clean text fields
     - Extract skills/requirements text
     - Handle missing values
