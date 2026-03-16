@@ -30,7 +30,13 @@ from src.utils.markup_detection import (
     MARKDOWN_UNDERSCORE_PATTERN,
     NEWLINE_SPACING_PATTERN,
     NEWLINE_TO_PERIOD_PATTERN,
+    remove_asterisk_clusters,
+    remove_broken_or_partial_urls,
+    remove_email_addresses,
+    remove_empty_wrappers,
     remove_gender_marker_tokens,
+    remove_phone_numbers,
+    remove_redacted_placeholders,
     QUOTE_CHARACTER_PATTERN,
     RAW_URL_PATTERN,
     remove_emoji_like_unicode,
@@ -148,7 +154,7 @@ def print_sample_record(df, label, max_fields=8, max_text_length=120):
 
 
 def clean_markup_from_text(value):
-    """Remove URLs/markup and quote noise while preserving apostrophes inside words."""
+    """Remove markup/contact details and normalize text for downstream NLP."""
     if pd.isna(value):
         return value
 
@@ -159,6 +165,12 @@ def clean_markup_from_text(value):
     text = MARKDOWN_BOLD_PATTERN.sub(r'\1', text)
     text = MARKDOWN_UNDERSCORE_PATTERN.sub(r'\1', text)
     text = INLINE_CODE_PATTERN.sub(r'\1', text)
+    text = remove_email_addresses(text)
+    text = remove_phone_numbers(text)
+    text = remove_broken_or_partial_urls(text)
+    text = remove_asterisk_clusters(text)
+    text = remove_redacted_placeholders(text)
+    text = remove_empty_wrappers(text)
     text = remove_gender_marker_tokens(text)
     text = QUOTE_CHARACTER_PATTERN.sub('', text)
     text = DECORATIVE_SEPARATOR_PATTERN.sub('', text)
@@ -255,11 +267,13 @@ def save_markup_cleaning_examples(before_records, after_df, detection_result, be
             'Detected Markup Types Before Cleaning': detected_types,
         })
 
-    with open(before_path, 'w', encoding='utf-8') as before_file:
-        json.dump(before_export, before_file, ensure_ascii=False, indent=2)
+    if before_path is not None:
+        with open(before_path, 'w', encoding='utf-8') as before_file:
+            json.dump(before_export, before_file, ensure_ascii=False, indent=2)
 
-    with open(after_path, 'w', encoding='utf-8') as after_file:
-        json.dump(after_export, after_file, ensure_ascii=False, indent=2)
+    if after_path is not None:
+        with open(after_path, 'w', encoding='utf-8') as after_file:
+            json.dump(after_export, after_file, ensure_ascii=False, indent=2)
 
 
 def clean_description_markup(df, column='Description', before_examples_path=None, after_examples_path=None):
@@ -278,7 +292,7 @@ def clean_description_markup(df, column='Description', before_examples_path=None
 
     remaining_markup_records, _ = find_records_with_markup(cleaned_df, column=column)
 
-    if before_examples_path is not None and after_examples_path is not None:
+    if before_examples_path is not None or after_examples_path is not None:
         save_markup_cleaning_examples(
             markup_records,
             cleaned_df,

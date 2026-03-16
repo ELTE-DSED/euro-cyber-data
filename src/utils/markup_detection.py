@@ -11,7 +11,20 @@ MARKDOWN_LINK_PATTERN = re.compile(r'\[([^\]]+)\]\([^)]+\)')
 MARKDOWN_BOLD_PATTERN = re.compile(r'\*\*([^*]+)\*\*')
 MARKDOWN_UNDERSCORE_PATTERN = re.compile(r'__([^_]+)__')
 INLINE_CODE_PATTERN = re.compile(r'`([^`]+)`')
-RAW_URL_PATTERN = re.compile(r'https?://\S+|www\.\S+')
+# Accept standard URLs and scraped variants with malformed protocol separators,
+RAW_URL_PATTERN = re.compile(r'(?i)(?:https?\s*[:\-]\s*/\s*/\s*|www\.)[^\s<>()\[\]{}"\']+')
+# Broken/partial links that survive cleaning
+BROKEN_OR_PARTIAL_URL_PATTERN = re.compile(
+    r'(?i)(?:https?://\s*)?(?:www\.\s*)?\.[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:/[^\s)\]}">\']*)?(?:\?[^\s)\]}">\']*)?'
+)
+EMAIL_PATTERN = re.compile(r'(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b')
+# Keep this conservative: 9+ digits avoids removing short numeric fragments.
+PHONE_NUMBER_PATTERN = re.compile(r'(?<!\w)\+?\d[\d\s().\-]{7,}\d(?!\w)')
+# Leftover star clusters such as `**`, `*****`, or markdown remnants attached to words.
+ASTERISK_CLUSTER_PATTERN = re.compile(r'\*{2,}')
+# Redacted placeholders often found where contact details were pre-masked at source.
+REDACTED_PLACEHOLDER_PATTERN = re.compile(r'(?<!\w)\*{3,}(?!\w)')
+EMPTY_WRAPPER_PATTERN = re.compile(r'\(\s*\)|\[\s*\]|\{\s*\}')
 # Matches markers like m/f, (m / f), m/f/x, m-w-d, f/h (any case, optional spaces/parentheses).
 GENDER_MARKER_PATTERN = re.compile(
     r'(?i)(?<!\w)[\(\[]?\s*[mfwxdh]\s*(?:[\/|\\-]?\s*[mfwxdh]\s*){1,2}[\)\]]?(?!\w)'
@@ -36,6 +49,11 @@ MARKUP_PATTERNS = {
     'Markdown links': re.compile(r'\[[^\]]+\]\([^)]+\)'),
     'Markdown formatting': re.compile(r'(?:\*\*[^*]+\*\*|__[^_]+__|`[^`]+`)'),
     'URLs': RAW_URL_PATTERN,
+    'Broken or partial URLs': BROKEN_OR_PARTIAL_URL_PATTERN,
+    'Email addresses': EMAIL_PATTERN,
+    'Phone numbers': PHONE_NUMBER_PATTERN,
+    'Asterisk clusters': ASTERISK_CLUSTER_PATTERN,
+    'Redacted placeholders': REDACTED_PLACEHOLDER_PATTERN,
     'Gender markers': GENDER_MARKER_PATTERN,
     'Quote characters': QUOTE_CHARACTER_PATTERN,
     'Decorative separators': DECORATIVE_SEPARATOR_PATTERN,
@@ -124,3 +142,33 @@ def remove_emoji_like_unicode(text):
 def remove_gender_marker_tokens(text):
     """Remove gender marker tokens such as m/f, m/f/x, (m / f), and related variants."""
     return GENDER_MARKER_PATTERN.sub(' ', text)
+
+
+def remove_email_addresses(text):
+    """Remove email addresses from text."""
+    return EMAIL_PATTERN.sub(' ', text)
+
+
+def remove_phone_numbers(text):
+    """Remove likely phone numbers from text."""
+    return PHONE_NUMBER_PATTERN.sub(' ', text)
+
+
+def remove_broken_or_partial_urls(text):
+    """Remove malformed or partially masked links that still look like URLs."""
+    return BROKEN_OR_PARTIAL_URL_PATTERN.sub(' ', text)
+
+
+def remove_asterisk_clusters(text):
+    """Remove leftover asterisk clusters such as ** or ****** from text."""
+    return ASTERISK_CLUSTER_PATTERN.sub(' ', text)
+
+
+def remove_redacted_placeholders(text):
+    """Remove masked placeholder tokens like ****** from text."""
+    return REDACTED_PLACEHOLDER_PATTERN.sub(' ', text)
+
+
+def remove_empty_wrappers(text):
+    """Remove empty parentheses/brackets/braces left after other cleanup steps."""
+    return EMPTY_WRAPPER_PATTERN.sub(' ', text)
