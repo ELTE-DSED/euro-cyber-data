@@ -22,6 +22,28 @@ from src.preprocessing.invalid_record_detection import (
 from src.preprocessing.language_detection import detect_language_distribution
 
 
+JOB_POSTINGS_COLUMNS_TO_DROP = [
+    'Insight',
+    'Job State',
+    'Detail URL',
+    'Company Name',
+    'Company Description',
+    'Company Website',
+    'Company Logo',
+    'Company Apply Url',
+    'Employee Count',
+    'Headquarters',
+    'Company Founded',
+    'Specialties',
+    'Hiring Manager Title',
+    'Hiring Manager Subtitle',
+    'Hiring Manager Title Insight',
+    'Hiring Manager Profile',
+    'Hiring Manager Image',
+    'Poster Id',
+]
+
+
 def get_language_check(df, field='Description', mode='sample', sample_size=500):
     """Reusable language check for preprocessing decisions."""
     if field not in df.columns:
@@ -62,6 +84,42 @@ def remove_records_with_all_critical_fields_invalid(df):
     return cleaned_df, invalid_records, checked_fields
 
 
+def drop_unneeded_job_posting_columns(df):
+    """Remove columns that are not needed for this analysis.
+    The function only drops columns that actually exist in the input DataFrame. """
+    existing_columns_to_drop = [
+        column for column in JOB_POSTINGS_COLUMNS_TO_DROP if column in df.columns
+    ]
+
+    if not existing_columns_to_drop:
+        return df.copy(), []
+
+    cleaned_df = df.drop(columns=existing_columns_to_drop).copy()
+    return cleaned_df, existing_columns_to_drop
+
+
+def print_sample_record(df, label, max_fields=8, max_text_length=120):
+    """Print a compact sample record to show how the data looks at a given step."""
+    print(f"\n  {label}")
+
+    if df.empty:
+        print("    No records available")
+        return
+
+    record = df.iloc[0].to_dict()
+    preview = {}
+    for index, (key, value) in enumerate(record.items()):
+        if index >= max_fields:
+            break
+
+        if isinstance(value, str) and len(value) > max_text_length:
+            preview[key] = f"{value[:max_text_length]}..."
+        else:
+            preview[key] = value
+
+    print(f"    {preview}")
+
+
 def preprocess_ecsf(data):
     """
     Preprocess ECSF data
@@ -88,9 +146,20 @@ def preprocess_job_postings(data):
 
     df = pd.DataFrame(data)
     print(f"  Loaded {len(df)} job posting records")
+    print_sample_record(df, 'Sample record at start:')
 
-    # Step 1: remove rows where every critical field is invalid.
-    cleaned_df, invalid_records, checked_fields = remove_records_with_all_critical_fields_invalid(df)
+    # Step 1: drop columns that are not needed for the current pipeline stage.
+    # Doing this first simplifies the record shape for all following preprocessing steps.
+    cleaned_df, dropped_columns = drop_unneeded_job_posting_columns(df)
+
+    if dropped_columns:
+        print(f"  Dropped columns: {dropped_columns}")
+        print(f"  Remaining columns: {len(cleaned_df.columns)}")
+    else:
+        print("  No configured columns found to drop")
+
+    # Step 2: remove rows where every critical field is invalid.
+    cleaned_df, invalid_records, checked_fields = remove_records_with_all_critical_fields_invalid(cleaned_df)
 
     if checked_fields:
         print(f"  Critical fields checked: {checked_fields}")
@@ -98,6 +167,8 @@ def preprocess_job_postings(data):
         print(f"  Remaining records: {len(cleaned_df)}")
     else:
         print("  No critical fields found for invalid-record detection")
+
+    print_sample_record(cleaned_df, 'Sample record at end:')
 
     return cleaned_df.to_dict('records')
 
