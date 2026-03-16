@@ -6,6 +6,7 @@ Saves preprocessed data to data/preprocessed/
 """
 
 import json
+import html
 import pandas as pd
 from pathlib import Path
 import argparse
@@ -15,6 +16,25 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 from src.utils.config import RAW_DATA_DIR, PREPROCESSED_DIR
 from src.utils.cli_args import add_sample_mode_arguments, is_valid_sample_size
+from src.utils.markup_detection import (
+    COLLAPSE_NEWLINES_PATTERN,
+    DECORATIVE_SEPARATOR_PATTERN,
+    find_records_with_markup,
+    GENDER_MARKER_PATTERN,
+    get_detected_markup_types,
+    HTML_TAG_PATTERN,
+    INLINE_CODE_PATTERN,
+    MARKDOWN_BOLD_PATTERN,
+    MARKDOWN_LINK_PATTERN,
+    MARKDOWN_UNDERSCORE_PATTERN,
+    NEWLINE_SPACING_PATTERN,
+    NEWLINE_TO_PERIOD_PATTERN,
+    remove_gender_marker_tokens,
+    QUOTE_CHARACTER_PATTERN,
+    RAW_URL_PATTERN,
+    remove_emoji_like_unicode,
+    WHITESPACE_PATTERN,
+)
 from src.utils.sampling import sample_collection
 from src.preprocessing.invalid_record_detection import (
     get_all_critical_fields_invalid_mask,
@@ -42,7 +62,6 @@ JOB_POSTINGS_COLUMNS_TO_DROP = [
     'Hiring Manager Image',
     'Poster Id',
 ]
-
 
 def get_language_check(df, field='Description', mode='sample', sample_size=500):
     """Reusable language check for preprocessing decisions."""
@@ -120,6 +139,113 @@ def print_sample_record(df, label, max_fields=8, max_text_length=120):
     print(f"    {preview}")
 
 
+def clean_markup_from_text(value):
+    """Remove URLs/markup and quote noise while preserving apostrophes inside words."""
+    if pd.isna(value):
+        return value
+
+    text = html.unescape(str(value))
+    text = MARKDOWN_LINK_PATTERN.sub(r'\1', text)
+    text = RAW_URL_PATTERN.sub(' ', text)
+    text = HTML_TAG_PATTERN.sub(' ', text)
+    text = MARKDOWN_BOLD_PATTERN.sub(r'\1', text)
+    text = MARKDOWN_UNDERSCORE_PATTERN.sub(r'\1', text)
+    text = INLINE_CODE_PATTERN.sub(r'\1', text)
+    text = remove_gender_marker_tokens(text)
+    text = QUOTE_CHARACTER_PATTERN.sub('', text)
+    text = DECORATIVE_SEPARATOR_PATTERN.sub('', text)
+    text = remove_emoji_like_unicode(text)
+    text = WHITESPACE_PATTERN.sub(' ', text)
+    text = NEWLINE_SPACING_PATTERN.sub('\n', text)
+    text = COLLAPSE_NEWLINES_PATTERN.sub('\n', text)
+    text = NEWLINE_TO_PERIOD_PATTERN.sub('. ', text)
+    return text.strip()
+
+
+def clean_gender_markers_in_columns(df, columns=('Title', 'Description')):
+    """Remove gender marker variants from selected text columns and return per-column counts."""
+    cleaned_df = df.copy()
+    cleaned_counts = {}
+
+    for column in columns:
+        if column not in cleaned_df.columns:
+            continue
+
+        texts = cleaned_df[column].fillna('').astype(str)
+        marker_mask = texts.str.contains(GENDER_MARKER_PATTERN, regex=True)
+        cleaned_counts[column] = int(marker_mask.sum())
+
+        if cleaned_counts[column] == 0:
+            continue
+
+        cleaned_df.loc[marker_mask, column] = texts[marker_mask].apply(
+            lambda text: WHITESPACE_PATTERN.sub(' ', remove_gender_marker_tokens(text)).strip()
+        )
+
+    return cleaned_df, cleaned_counts
+
+
+def save_markup_cleaning_examples(before_records, after_df, detection_result, before_path, after_path, column='Description', sample_count=20):
+    """Save before/after examples for records whose descriptions contained markup-like content."""
+    sample_before = before_records.head(sample_count)
+    before_export = []
+    after_export = []
+
+    for index, record in sample_before.iterrows():
+        detected_types = get_detected_markup_types(index, detection_result)
+        before_export.append({
+            'Title': record.get('Title'),
+            'Location': record.get('Location'),
+            'Primary Description': record.get('Primary Description'),
+            'Description': record.get(column),
+            'Detected Markup Types': detected_types,
+        })
+
+        after_record = after_df.loc[index]
+        after_export.append({
+            'Title': after_record.get('Title'),
+            'Location': after_record.get('Location'),
+            'Primary Description': after_record.get('Primary Description'),
+            'Description': after_record.get(column),
+            'Detected Markup Types Before Cleaning': detected_types,
+        })
+
+    with open(before_path, 'w', encoding='utf-8') as before_file:
+        json.dump(before_export, before_file, ensure_ascii=False, indent=2)
+
+    with open(after_path, 'w', encoding='utf-8') as after_file:
+        json.dump(after_export, after_file, ensure_ascii=False, indent=2)
+
+
+def clean_description_markup(df, column='Description', before_examples_path=None, after_examples_path=None):
+    """
+    Detect and remove markup-like content from the description column.
+
+    This step cleans URLs, HTML tags/entities, and simple markdown-like patterns
+    while preserving the remaining readable text.
+    """
+    if column not in df.columns:
+        return df.copy(), df.iloc[0:0].copy(), 0
+
+    markup_records, detection_result = find_records_with_markup(df, column=column)
+    cleaned_df = df.copy()
+    cleaned_df[column] = cleaned_df[column].apply(clean_markup_from_text)
+
+    remaining_markup_records, _ = find_records_with_markup(cleaned_df, column=column)
+
+    if before_examples_path is not None and after_examples_path is not None:
+        save_markup_cleaning_examples(
+            markup_records,
+            cleaned_df,
+            detection_result,
+            before_examples_path,
+            after_examples_path,
+            column=column,
+        )
+
+    return cleaned_df, markup_records, len(remaining_markup_records)
+
+
 def preprocess_ecsf(data):
     """
     Preprocess ECSF data
@@ -133,7 +259,7 @@ def preprocess_ecsf(data):
     pass
 
 
-def preprocess_job_postings(data):
+def preprocess_job_postings(data, markup_examples_before_path=None, markup_examples_after_path=None):
     """
     Preprocess Job Postings data
     - Clean text fields
@@ -158,7 +284,47 @@ def preprocess_job_postings(data):
     else:
         print("  No configured columns found to drop")
 
-    # Step 2: remove rows where every critical field is invalid.
+    # Step 2: detect and save "before" examples from original state (before any cleaning).
+    markup_records, detection_result = find_records_with_markup(cleaned_df, column='Description')
+    
+    if markup_examples_before_path is not None and len(markup_records) > 0:
+        # Save the original, unmodified records as "before" examples for validation
+        sample_before = markup_records.head(20)
+        before_export = []
+        
+        for index, record in sample_before.iterrows():
+            detected_types = get_detected_markup_types(index, detection_result)
+            before_export.append({
+                'Title': record.get('Title'),
+                'Location': record.get('Location'),
+                'Primary Description': record.get('Primary Description'),
+                'Description': record.get('Description'),
+                'Detected Markup Types': detected_types,
+            })
+        
+        with open(markup_examples_before_path, 'w', encoding='utf-8') as f:
+            json.dump(before_export, f, ensure_ascii=False, indent=2)
+        print(f"  Saved description markup examples before cleaning: {markup_examples_before_path}")
+
+    # Step 3: remove gender marker variants from title/description text.
+    cleaned_df, gender_marker_counts = clean_gender_markers_in_columns(cleaned_df)
+    if gender_marker_counts:
+        for column, count in gender_marker_counts.items():
+            print(f"  {column} records with gender markers removed: {count}")
+    else:
+        print("  No target columns found for gender marker cleaning")
+
+    # Step 4: remove markup-like content from descriptions and save "after" examples.
+    cleaned_df, markup_records_cleaned, remaining_markup_count = clean_description_markup(
+        cleaned_df,
+        before_examples_path=None,  # Already saved in Step 2
+        after_examples_path=markup_examples_after_path,
+    )
+    print(f"  Description records with markup details: detected={len(markup_records)}, remaining after cleaning={remaining_markup_count}")
+    if markup_examples_after_path is not None:
+        print(f"  Saved description markup examples after cleaning: {markup_examples_after_path}")
+
+    # Step 5: remove rows where every critical field is invalid.
     cleaned_df, invalid_records, checked_fields = remove_records_with_all_critical_fields_invalid(cleaned_df)
 
     if checked_fields:
@@ -226,7 +392,18 @@ def main():
     print(f"  Job postings loaded: {len(job_data)} / {original_job_count}")
     
     # ecsf_preprocessed = preprocess_ecsf(ecsf_data)
-    job_preprocessed = preprocess_job_postings(job_data)
+    if args.run_mode == 'sample':
+        markup_examples_before_path = PREPROCESSED_DIR / f'job_postings_description_markup_before_sample_{len(job_data)}.json'
+        markup_examples_after_path = PREPROCESSED_DIR / f'job_postings_description_markup_after_sample_{len(job_data)}.json'
+    else:
+        markup_examples_before_path = PREPROCESSED_DIR / 'job_postings_description_markup_before_full.json'
+        markup_examples_after_path = PREPROCESSED_DIR / 'job_postings_description_markup_after_full.json'
+
+    job_preprocessed = preprocess_job_postings(
+        job_data,
+        markup_examples_before_path=markup_examples_before_path,
+        markup_examples_after_path=markup_examples_after_path,
+    )
 
     # Save preprocessed data
     # save_preprocessed_data(ecsf_preprocessed, 'ecsf_preprocessed.json')

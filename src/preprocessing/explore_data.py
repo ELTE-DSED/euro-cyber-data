@@ -12,8 +12,13 @@ import sys
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from src.utils.config import RAW_DATA_DIR
+from src.utils.config import RAW_DATA_DIR, PREPROCESSED_DIR
 from src.utils.cli_args import add_sample_mode_arguments, is_valid_sample_size
+from src.utils.markup_detection import (
+    find_records_with_markup,
+    get_detected_markup_types,
+    get_markup_counts,
+)
 from src.utils.sampling import sample_collection
 from src.preprocessing.invalid_record_detection import (
     find_all_critical_fields_invalid_records,
@@ -32,6 +37,65 @@ def load_json(filepath):
     """Load JSON file"""
     with open(filepath, 'r', encoding='utf-8') as f:
         return json.load(f)
+
+
+def inspect_description_markup(
+    df,
+    column='Description',
+    sample_count=3,
+    save_output=False,
+    output_path=None,
+):
+    """Check whether the description column contains HTML or other markup-like patterns."""
+    markup_records, detection_result = find_records_with_markup(df, column=column)
+    if detection_result is None:
+        return
+
+    markup_counts = get_markup_counts(detection_result)
+
+    print("\n" + "=" * 80)
+    print("🧩 DESCRIPTION MARKUP CHECK")
+    print("=" * 80)
+    print(f"\n  Records with markup-like content in '{column}': {len(markup_records)} ({(len(markup_records)/len(df)*100):.2f}%)")
+
+    if save_output and output_path is not None:
+        export_records = []
+        for _, record in markup_records.iterrows():
+            markers = get_detected_markup_types(record.name, detection_result)
+
+            export_records.append({
+                'Title': record.get('Title'),
+                'Location': record.get('Location'),
+                'Primary Description': record.get('Primary Description'),
+                'Description': record.get(column),
+                'Detected Markup Types': markers,
+                'Created At': record.get('Created At'),
+                'Scraped At': record.get('Scraped At'),
+            })
+
+        with open(output_path, 'w', encoding='utf-8') as output_file:
+            json.dump(export_records, output_file, ensure_ascii=False, indent=2)
+
+        print(f"  Saved markup records to: {output_path}")
+
+    if len(markup_records) == 0:
+        print("  ✅ No HTML or markup-like patterns detected")
+        return
+
+    for label, count in markup_counts.items():
+        print(f"  - {label}: {count}")
+
+    print("\n  Sample records:")
+    for i, (_, record) in enumerate(markup_records.head(sample_count).iterrows()):
+        description = str(record.get(column, ''))
+        if len(description) > 300:
+            description = f"{description[:300]}..."
+
+        markers = get_detected_markup_types(record.name, detection_result)
+
+        print(f"    Record {i+1} ({', '.join(markers)}):")
+        print(f"      Title: {record.get('Title', 'N/A')}")
+        print(f"      Description: {description}")
 
 
 def explore_ecsf(filepath):
@@ -150,6 +214,8 @@ def explore_job_postings(
     run_sample_size=1000,
     language_mode='sample',
     language_sample_size=1000,
+    save_markup_output=False,
+    markup_output_path=None,
 ):
     """Explore Job Postings data structure"""
     print("\n\n" + "=" * 80)
@@ -306,6 +372,12 @@ def explore_job_postings(
                 for i, (_, record) in enumerate(both_invalid_df.head(3).iterrows()):
                     print(f"    Record {i+1}: {dict(list(record.items())[:5])}")
 
+        inspect_description_markup(
+            df,
+            save_output=save_markup_output,
+            output_path=markup_output_path,
+        )
+
         # Language Detection
         if language_sample_size == 0:
             print("\n" + "=" * 80)
@@ -399,6 +471,11 @@ def main():
         default=None,
         help='Sample size per field for language detection. Use 0 to skip language detection. Defaults to --sample-size if not provided.',
     )
+    parser.add_argument(
+        '--save-markup-descriptions',
+        action='store_true',
+        help='Save descriptions with detected HTML/markup patterns to a separate JSON file in data/preprocessed.',
+    )
     args = parser.parse_args()
 
     if not is_valid_sample_size(args.sample_size):
@@ -439,6 +516,14 @@ def main():
     
     # Explore both datasets
     try:
+        if args.save_markup_descriptions:
+            if args.run_mode == 'sample':
+                markup_output_path = PREPROCESSED_DIR / f'job_postings_description_markup_sample_{args.sample_size}.json'
+            else:
+                markup_output_path = PREPROCESSED_DIR / 'job_postings_description_markup_full.json'
+        else:
+            markup_output_path = None
+
         ecsf_data = explore_ecsf(ecsf_file)
         job_data = explore_job_postings(
             job_postings_file,
@@ -446,6 +531,8 @@ def main():
             run_sample_size=args.sample_size,
             language_mode=args.language_mode,
             language_sample_size=language_sample_size,
+            save_markup_output=args.save_markup_descriptions,
+            markup_output_path=markup_output_path,
         )
         
         print("\n\n" + "=" * 80)
