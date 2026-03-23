@@ -72,6 +72,23 @@ JOB_POSTINGS_COLUMNS_TO_DROP = [
 ]
 
 LOCATION_TO_COUNTRY_OVERRIDES = {
+    "Warsaw Metropolitan Area": "Poland",
+    "Cork Metropolitan Area": "Ireland",
+    "Greater Stockholm Metropolitan Area": "Sweden",
+    "Bucharest Metropolitan Area": "Romania",
+    "Brussels Metropolitan Area": "Belgium",
+    "Gdansk Metropolitan Area": "Poland",
+    "Rotterdam and The Hague": "Netherlands",
+    "Greater Marseille Metropolitan Area": "France",
+    "Amsterdam Area": "Netherlands",
+    "Greater Groningen Area": "Netherlands",
+    "Tampere Metropolitan Area": "Finland",
+    "Stuttgart Region": "Germany",
+    "Porto Metropolitan Area": "Portugal",
+    "Greater Milan Metropolitan Area": "Italy",
+    "Greater Madrid Metropolitan Area": "Spain",
+    "Greater Sevilla Metropolitan Area": "Spain",
+    "Arnhem-Nijmegen Region": "Netherlands",
     "Lisbon Metropolitan Area": "Portugal",
     "Greater Barcelona Metropolitan Area": "Spain",
     "Greater Zaragoza Metropolitan Area": "Spain",
