@@ -708,14 +708,120 @@ def clean_description_markup(df, column='Description', before_examples_path=None
 def preprocess_ecsf(data):
     """
     Preprocess ECSF data
-    
-    TODO: Implement based on exploration findings
-    - Standardize field names
-    - Extract relevant fields
     """
     print("🔧 Preprocessing ECSF data...")
-    
-    pass
+    def _preview_record(record, max_text_length=160):
+        if not isinstance(record, dict):
+            return record
+
+        preview = {}
+        for key, value in record.items():
+            if isinstance(value, str) and len(value) > max_text_length:
+                preview[key] = f"{value[:max_text_length]}..."
+            else:
+                preview[key] = value
+        return preview
+
+    def _print_structure_sample(label, payload):
+        if not isinstance(payload, dict):
+            print(f"  {label}: non-dict payload")
+            return
+
+        top_keys = sorted(payload.keys())
+        print(f"  {label} top-level keys: {top_keys}")
+
+        work_roles = payload.get('work_role')
+        if isinstance(work_roles, list) and work_roles:
+            print(f"  {label} work_role[0] keys: {sorted(work_roles[0].keys())}")
+            print(f"  {label} work_role[0] sample: {_preview_record(work_roles[0])}")
+
+        tks_items = payload.get('tks')
+        if isinstance(tks_items, list) and tks_items:
+            print(f"  {label} tks[0] keys: {sorted(tks_items[0].keys())}")
+            print(f"  {label} tks[0] sample: {_preview_record(tks_items[0])}")
+
+        relationships = payload.get('relationship')
+        if isinstance(relationships, list) and relationships:
+            print(f"  {label} relationship[0] keys: {sorted(relationships[0].keys())}")
+            print(f"  {label} relationship[0] sample: {_preview_record(relationships[0])}")
+
+    def _remove_task_tks(payload):
+        if not isinstance(payload, dict):
+            return payload
+
+        tks_items = payload.get('tks')
+        if not isinstance(tks_items, list):
+            return payload
+
+        kept_tks = [item for item in tks_items if item.get('type') != 'Task']
+        removed_count = len(tks_items) - len(kept_tks)
+        kept_ids = {item.get('id') for item in kept_tks if item.get('id') is not None}
+
+        payload = payload.copy()
+        payload['tks'] = kept_tks
+
+        relationships = payload.get('relationship')
+        removed_relationships = 0
+        if isinstance(relationships, list):
+            kept_relationships = [
+                item for item in relationships
+                if item.get('tks_id') in kept_ids
+            ]
+            removed_relationships = len(relationships) - len(kept_relationships)
+            payload['relationship'] = kept_relationships
+
+        print(
+            "  ECSF Task filtering: "
+            f"tasks_removed={removed_count}, relationships_removed={removed_relationships}"
+        )
+        return payload
+
+    def _remove_work_role_fields(payload, fields_to_remove):
+        if not isinstance(payload, dict):
+            return payload, 0
+
+        work_roles = payload.get('work_role')
+        if not isinstance(work_roles, list):
+            return payload, 0
+
+        removed_count = 0
+        cleaned_roles = []
+        for role in work_roles:
+            if not isinstance(role, dict):
+                cleaned_roles.append(role)
+                continue
+
+            role_copy = role.copy()
+            for field in fields_to_remove:
+                if field in role_copy:
+                    role_copy.pop(field, None)
+                    removed_count += 1
+
+            cleaned_roles.append(role_copy)
+
+        payload = payload.copy()
+        payload['work_role'] = cleaned_roles
+        return payload, removed_count
+
+    def _normalize_apostrophes(value):
+        if isinstance(value, str):
+            return value.replace('\\u2019', '\u2019')
+        if isinstance(value, list):
+            return [_normalize_apostrophes(item) for item in value]
+        if isinstance(value, dict):
+            return {key: _normalize_apostrophes(item) for key, item in value.items()}
+        return value
+
+    _print_structure_sample('Initial', data)
+    normalized = _normalize_apostrophes(data)
+    normalized, removed_fields = _remove_work_role_fields(
+        normalized,
+        fields_to_remove={'summary_statement', 'mission'},
+    )
+    print(f"  ECSF work_role fields removed: {removed_fields}")
+    normalized = _remove_task_tks(normalized)
+    _print_structure_sample('Final', normalized)
+    return normalized
 
 
 def preprocess_job_postings(data):
@@ -878,7 +984,7 @@ def main():
         print(f"  Sample size: {args.sample_size}")
     
     # Load raw data
-    # ecsf_file = RAW_DATA_DIR / 'ecsf.json'
+    ecsf_file = RAW_DATA_DIR / 'ecsf.json'
     job_postings_file = RAW_DATA_DIR / 'job_postings.json'
     
     if not job_postings_file.exists():
@@ -886,8 +992,8 @@ def main():
         return
     
     # Load
-    # with open(ecsf_file, 'r', encoding='utf-8') as f:
-    #     ecsf_data = json.load(f)
+    with open(ecsf_file, 'r', encoding='utf-8') as f:
+        ecsf_data = json.load(f)
     
     with open(job_postings_file, 'r', encoding='utf-8') as f:
         job_data = json.load(f)
@@ -896,11 +1002,11 @@ def main():
     job_data = sample_collection(job_data, mode=args.run_mode, sample_size=args.sample_size)
     print(f"  Job postings loaded: {len(job_data)} / {original_job_count}")
     
-    # ecsf_preprocessed = preprocess_ecsf(ecsf_data)
+    ecsf_preprocessed = preprocess_ecsf(ecsf_data)
     job_preprocessed = preprocess_job_postings(job_data)
 
     # Save preprocessed data
-    # save_preprocessed_data(ecsf_preprocessed, 'ecsf_preprocessed.json')
+    save_preprocessed_data(ecsf_preprocessed, 'ecsf_preprocessed.json')
     if args.run_mode == 'sample':
         output_name = f"job_postings_preprocessed_sample_{len(job_data)}.json"
     else:
