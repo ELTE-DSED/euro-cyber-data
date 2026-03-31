@@ -792,11 +792,12 @@ def _clean_skill_value(value):
     text = str(value).strip()
 
     if SKILL_PROFILE_MATCH_PATTERN.fullmatch(text):
-        return ''
+        return pd.NA
 
     text = SKILL_PREFIX_PATTERN.sub('', text)
     text = SKILL_SUFFIX_MORE_PATTERN.sub('', text)
-    return WHITESPACE_PATTERN.sub(' ', text).strip()
+    cleaned = WHITESPACE_PATTERN.sub(' ', text).strip()
+    return cleaned if cleaned else pd.NA
 
 
 def clean_skill_feature(df, column='Skill'):
@@ -1076,6 +1077,12 @@ def preprocess_job_postings(data):
         before_examples_path=None,
         after_examples_path=None,
     )
+    if 'Description' in cleaned_df.columns:
+        empty_description_mask = cleaned_df['Description'].fillna('').astype(str).str.strip().eq('')
+        empty_description_count = int(empty_description_mask.sum())
+        if empty_description_count > 0:
+            cleaned_df.loc[empty_description_mask, 'Description'] = pd.NA
+            print(f"  Description empty strings normalized to missing: {empty_description_count}")
     print(
         "  Description block filtering: "
         f"records_with_removed_blocks={description_block_stats['records_with_removed_blocks']}, "
