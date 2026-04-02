@@ -94,6 +94,24 @@ docker-compose exec app python src/preprocessing/load_ecsf_to_db.py
 # Load preprocessed data into DB (sample of job postings)
 docker-compose exec app python src/preprocessing/load_preprocessed_to_db.py --run-mode sample --sample-size 500
 
+# Create extraction tables (job_skill, ecsf_tks_text)
+docker-compose exec app python src/extraction/create_extraction_tables.py
+
+# Load extraction tables from DB data
+docker-compose exec app python src/extraction/load_extraction_tables.py
+
+# Create embedding/similarity tables
+docker-compose exec app python src/embedding/create_embedding_tables.py
+
+# Embed skills (SBERT)
+docker-compose exec app python src/embedding/embed_skills.py
+
+# Embed ECSF text (SBERT)
+docker-compose exec app python src/embedding/embed_ecsf.py
+
+# Compute skill to ECSF similarity
+docker-compose exec app python src/similarity/compute_similarity.py
+
 # Minimal webapp
 docker-compose exec app python webapp/app.py
 # Open: http://localhost:5000
