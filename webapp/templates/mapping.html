@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill to ECSF Mapping</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-inner">
+                <div>
+                    <p class="eyebrow">Euro Cyber Data</p>
+                    <h1>Skill to ECSF Mapping</h1>
+                    <p class="subtitle">Interpretable matches from the DB view.</p>
+                </div>
+                <a class="button ghost" href="{{ url_for('index') }}">Back</a>
+            </div>
+        </header>
+
+        <main>
+            <section class="panel">
+                <h2>Filters</h2>
+                <form class="filters" method="get" action="{{ url_for('mapping') }}">
+                    <div class="field">
+                        <label for="skill">Skill contains</label>
+                        <input type="text" id="skill" name="skill" value="{{ skill_query }}" placeholder="e.g. incident response">
+                    </div>
+                    <div class="field">
+                        <label for="top_k">Top K per skill</label>
+                        <input type="number" id="top_k" name="top_k" min="1" max="25" value="{{ top_k }}">
+                    </div>
+                    <div class="field">
+                        <label for="min_similarity">Min similarity</label>
+                        <input type="number" id="min_similarity" name="min_similarity" step="0.01" min="0" max="1" value="{{ min_similarity }}">
+                    </div>
+                    <div class="field">
+                        <label for="model_name">Model</label>
+                        <input type="text" id="model_name" name="model_name" value="{{ model_name }}">
+                    </div>
+                    <div class="field">
+                        <label for="page_size">Rows per page</label>
+                        <input type="number" id="page_size" name="page_size" min="10" max="200" step="10" value="{{ page_size }}">
+                    </div>
+                    <div class="actions">
+                        <button class="button" type="submit">Apply</button>
+                        <a class="button ghost" href="{{ url_for('mapping') }}">Reset</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Results</h2>
+                    <span class="meta">{{ total_rows }} rows</span>
+                </div>
+
+                {% if error %}
+                <div class="alert">
+                    <p>Query error: {{ error }}</p>
+                </div>
+                {% endif %}
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Skill</th>
+                                <th>ECSF ID</th>
+                                <th>ECSF Text</th>
+                                <th>Similarity</th>
+                                <th>Rank</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                            <tr>
+                                <td>
+                                    <div class="skill-title">{{ row.normalized_skill }}</div>
+                                    <div class="skill-id">Skill ID {{ row.skill_id }}</div>
+                                </td>
+                                <td>{{ row.tks_id }}</td>
+                                <td class="text-cell">{{ row.tks_description }}</td>
+                                <td>{{ "%.3f"|format(row.similarity) }}</td>
+                                <td>{{ row.rank }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination">
+                    <div class="page-info">
+                        Page {{ page }} of {{ total_pages }}
+                    </div>
+                    <div class="page-controls">
+                        {% if pagination.first %}
+                        <a class="button ghost" href="{{ pagination.first }}">First</a>
+                        <a class="button ghost" href="{{ pagination.prev }}">Prev</a>
+                        {% endif %}
+                        {% if pagination.next %}
+                        <a class="button ghost" href="{{ pagination.next }}">Next</a>
+                        <a class="button ghost" href="{{ pagination.last }}">Last</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>By Espejo Paulina | Master Thesis Project | 2026</p>
+        </footer>
+    </div>
+</body>
+</html>
