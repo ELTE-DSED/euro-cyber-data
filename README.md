@@ -112,6 +112,9 @@ docker-compose exec app python src/embedding/embed_ecsf.py
 # Compute skill to ECSF similarity
 docker-compose exec app python src/similarity/compute_similarity.py
 
+# Create mapping view (interpretable results)
+docker-compose exec app python src/mapping/create_mapping_view.py
+
 # Minimal webapp
 docker-compose exec app python webapp/app.py
 # Open: http://localhost:5000
