@@ -76,6 +76,11 @@ NOISE_SKILL_PATTERNS: List[re.Pattern] = [
     re.compile(r"\byou\s+may\s+be\s+a\s+good\s+fit\b", re.IGNORECASE),
 ]
 
+EXCLUDED_NORMALIZED_SKILLS: Set[str] = {
+    "english",
+    "cybersecurity",
+}
+
 @dataclass
 class NormalizedSkill:
     raw_skill: str
@@ -171,6 +176,8 @@ def split_skill_field(value: str) -> List[str]:
 
 def normalize_skill(raw_skill: str) -> NormalizedSkill:
     normalized_skill, _aliases = normalize_token(raw_skill)
+    if normalized_skill in EXCLUDED_NORMALIZED_SKILLS:
+        normalized_skill = ""
     return NormalizedSkill(
         raw_skill=raw_skill,
         normalized_skill=normalized_skill,
