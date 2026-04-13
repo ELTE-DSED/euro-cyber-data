@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Frequency</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-inner">
+                <div>
+                    <p class="eyebrow">Euro Cyber Data</p>
+                    <h1>Normalized Skill Frequency</h1>
+                    <p class="subtitle">Share of postings mentioning each skill.</p>
+                </div>
+                <a class="button ghost" href="{{ url_for('index') }}">Back</a>
+            </div>
+        </header>
+
+        <main>
+            <section class="panel">
+                <h2>Filters</h2>
+                <form class="filters" method="get" action="{{ url_for('frequency') }}">
+                    <div class="field">
+                        <label for="top_n">Top N skills</label>
+                        <input type="number" id="top_n" name="top_n" min="5" max="200" value="{{ top_n }}">
+                    </div>
+                    <div class="actions">
+                        <button class="button" type="submit">Apply</button>
+                        <a class="button ghost" href="{{ url_for('frequency') }}">Reset</a>
+                    </div>
+                </form>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Chart</h2>
+                    <span class="meta">Total job postings: {{ total_postings }}</span>
+                </div>
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Chart</h2>
+                        <span class="meta">Total job postings: {{ total_postings }}</span>
+                    </div>
+                    <div class="panel-actions">
+                        <button class="button ghost" type="button" id="toggleOccurrences">Show occurrences</button>
+                        <button class="button" type="button" id="togglePercent">Show percent</button>
+                    </div>
+                </div>
+
+                {% if error %}
+                <div class="alert">
+                    <p>Query error: {{ error }}</p>
+                </div>
+                {% endif %}
+
+                <div class="chart-wrap">
+                    <canvas id="frequencyChart"></canvas>
+                </div>
+            </section>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Skill</th>
+                                <th>Occurrences</th>
+                                <th>Frequency (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                            <tr>
+                                <td>
+                                    <div class="skill-title">{{ row.normalized_skill }}</div>
+                                </td>
+                                <td>{{ row.occurrences }}</td>
+                                <td>{{ "%.2f"|format(row.frequency_pct) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>By Espejo Paulina | Master Thesis Project | 2026</p>
+        </footer>
+    </div>
+
+    <script>
+        const labels = {{ labels | tojson }};
+        const values = {{ values | tojson }};
+        const labelSuffix = {{ label_suffix | tojson }};
+
+        const ctx = document.getElementById("frequencyChart").getContext("2d");
+        const chart = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [{
+                    label: "Percent of job postings",
+                    data: values,
+                    backgroundColor: "rgba(0, 124, 127, 0.7)",
+                    borderColor: "rgba(0, 124, 127, 1)",
+                    borderWidth: 1,
+                }],
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: "Percent of job postings",
+                        },
+                    },
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const idx = context.dataIndex;
+                                const percent = labelSuffix[idx];
+                                return `${percent}% of postings (${context.raw})`;
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        const toggleOccurrences = document.getElementById("toggleOccurrences");
+        const togglePercent = document.getElementById("togglePercent");
+
+        function showOccurrences() {
+            chart.data.datasets[0].data = values;
+            chart.data.datasets[0].label = "Occurrences (distinct postings)";
+            chart.options.scales.y.title.text = "Occurrences";
+            chart.options.scales.y.ticks = {
+                callback: value => value,
+            };
+            chart.options.plugins.tooltip.callbacks.label = (context) => {
+                const idx = context.dataIndex;
+                const percent = labelSuffix[idx];
+                return `${context.raw} postings (${percent}%)`;
+            };
+            chart.update();
+            toggleOccurrences.classList.add("button-active");
+            togglePercent.classList.remove("button-active");
+        }
+
+        function showPercent() {
+            const percents = labelSuffix;
+            chart.data.datasets[0].data = percents;
+            chart.data.datasets[0].label = "Percent of job postings";
+            chart.options.scales.y.title.text = "Percent of job postings";
+            chart.options.scales.y.ticks = {
+                callback: value => `${value}%`,
+            };
+            chart.options.plugins.tooltip.callbacks.label = (context) => {
+                const idx = context.dataIndex;
+                return `${context.raw}% (${values[idx]} postings)`;
+            };
+            chart.update();
+            togglePercent.classList.add("button-active");
+            toggleOccurrences.classList.remove("button-active");
+        }
+
+        toggleOccurrences.addEventListener("click", showOccurrences);
+        togglePercent.addEventListener("click", showPercent);
+        showPercent();
+    </script>
+</body>
+</html>
