@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EU Skill Demand Map</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-inner">
+                <div>
+                    <p class="eyebrow">Euro Cyber Data</p>
+                    <h1>EU Skill Demand Map</h1>
+                    <p class="subtitle">Share of postings mentioning each skill by country.</p>
+                </div>
+                <a class="button ghost" href="{{ url_for('index') }}">Back</a>
+            </div>
+        </header>
+
+        <main class="split">
+            <section class="panel">
+                <h2>Filters</h2>
+                <form class="filters" method="get" action="{{ url_for('geo_summary') }}">
+                    <div class="field">
+                        <label for="top_n">Top N skills per country</label>
+                        <input type="number" id="top_n" name="top_n" min="3" max="10" value="{{ top_n }}">
+                    </div>
+                    <div class="field">
+                        <label for="include_non_eu">Include non-EU</label>
+                        <select id="include_non_eu" name="include_non_eu">
+                            <option value="false" {% if not include_non_eu %}selected{% endif %}>No</option>
+                            <option value="true" {% if include_non_eu %}selected{% endif %}>Yes</option>
+                        </select>
+                    </div>
+                    <div class="actions">
+                        <button class="button" type="submit">Apply</button>
+                        <a class="button ghost" href="{{ url_for('geo_summary') }}">Reset</a>
+                    </div>
+                </form>
+
+                <div class="map-wrap" id="map"></div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Country summary</h2>
+                    <span class="meta">{{ summaries|length }} countries</span>
+                </div>
+
+                {% if error %}
+                <div class="alert">
+                    <p>Query error: {{ error }}</p>
+                </div>
+                {% endif %}
+
+                <div class="country-summary" id="countrySummary">
+                    <p>Select a country to see top skills.</p>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Country</th>
+                                <th>Total postings</th>
+                                <th>Top 3 skills</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in summaries %}
+                            <tr>
+                                <td>{{ row.country }}</td>
+                                <td>{{ row.total_postings }}</td>
+                                <td>
+                                    {% if row.top_skills %}
+                                        {% for skill in row.top_skills[:3] %}
+                                            <div>{{ skill.skill }} ({{ "%.2f"|format(skill.frequency_pct) }}%)</div>
+                                        {% endfor %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>By Espejo Paulina | Master Thesis Project | 2026</p>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const summaries = {{ summaries | tojson }};
+        const summaryLookup = Object.fromEntries(
+            summaries.map(item => [item.country, item])
+        );
+
+        const nameOverrides = {
+            "Czech Republic": "Czechia",
+            "Czechia": "Czechia",
+            "United Kingdom": "United Kingdom",
+            "Russia": "Russian Federation",
+        };
+
+        const map = L.map("map", {
+            zoomControl: true,
+            scrollWheelZoom: false,
+        }).setView([54.5, 15.0], 4);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 6,
+            attribution: "&copy; OpenStreetMap",
+        }).addTo(map);
+
+        function getColor(value, maxValue) {
+            if (!maxValue) {
+                return "#e7e2d7";
+            }
+            const ratio = value / maxValue;
+            if (ratio > 0.66) return "#007c7f";
+            if (ratio > 0.33) return "#31a7aa";
+            return "#8ad7d8";
+        }
+
+        function updateSummary(countryName) {
+            const panel = document.getElementById("countrySummary");
+            const entry = summaryLookup[countryName];
+            if (!entry) {
+                panel.innerHTML = "<p>No data available for this country.</p>";
+                return;
+            }
+
+            const topSkills = entry.top_skills
+                .map(
+                    skill =>
+                        `<li><strong>${skill.skill}</strong> (${skill.frequency_pct}%)</li>`
+                )
+                .join("");
+
+            panel.innerHTML = `
+                <h3>${entry.country}</h3>
+                <p>Total job postings: ${entry.total_postings}</p>
+                <ul>${topSkills}</ul>
+            `;
+        }
+
+        const maxMentions = Math.max(...summaries.map(row => row.total_postings), 0);
+
+        function showMapError(message) {
+            const mapEl = document.getElementById("map");
+            mapEl.innerHTML = `<div class="map-error">${message}</div>`;
+        }
+
+        fetch("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json")
+            .then(response => response.json())
+            .then(geojson => {
+                const countLayer = L.layerGroup().addTo(map);
+
+                L.geoJSON(geojson, {
+                    style: feature => {
+                        const rawName = feature.properties.name;
+                        const name = nameOverrides[rawName] || rawName;
+                        const entry = summaryLookup[name];
+                        const mentions = entry ? entry.total_postings : 0;
+                        return {
+                            fillColor: getColor(mentions, maxMentions),
+                            weight: 1,
+                            opacity: 1,
+                            color: "#ffffff",
+                            fillOpacity: entry ? 0.75 : 0.2,
+                        };
+                    },
+                    onEachFeature: (feature, layer) => {
+                        const rawName = feature.properties.name;
+                        const name = nameOverrides[rawName] || rawName;
+                        const entry = summaryLookup[name];
+                        const mentions = entry ? entry.total_postings : 0;
+                        if (entry) {
+                            layer.bindTooltip(
+                                `${name} (${mentions})`,
+                                { sticky: true }
+                            );
+
+                            const center = layer.getBounds().getCenter();
+                            L.marker(center, {
+                                interactive: false,
+                                icon: L.divIcon({
+                                    className: "country-count-label",
+                                    html: `<span>${mentions}</span>`,
+                                    iconSize: [36, 22],
+                                    iconAnchor: [18, 11],
+                                }),
+                            }).addTo(countLayer);
+                        }
+                        layer.on("click", () => updateSummary(name));
+                    },
+                }).addTo(map);
+                setTimeout(() => map.invalidateSize(), 200);
+            })
+            .catch(() => {
+                showMapError("Unable to load map data. Check network access to GitHub raw content.");
+            });
+
+        const legend = L.control({ position: "bottomright" });
+        legend.onAdd = () => {
+            const div = L.DomUtil.create("div", "map-legend");
+            const steps = [0.33, 0.66, 1];
+            const labels = steps.map(step => Math.round(step * maxMentions));
+            div.innerHTML = `
+                <h4>Total postings</h4>
+                <div><span class="swatch" style="background:#8ad7d8"></span> 0 - ${labels[0]}</div>
+                <div><span class="swatch" style="background:#31a7aa"></span> ${labels[0] + 1} - ${labels[1]}</div>
+                <div><span class="swatch" style="background:#007c7f"></span> ${labels[1] + 1} - ${labels[2]}</div>
+            `;
+            return div;
+        };
+        legend.addTo(map);
+    </script>
+</body>
+</html>
