@@ -26,7 +26,7 @@ JOB_POSTINGS_FILE = os.getenv("JOB_POSTINGS_FILE", "job_postings.json")
 ECSF_FILE = os.getenv("ECSF_FILE", "ecsf.json")
 
 # Pipeline
-SBERT_MODEL = os.getenv("SBERT_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+SBERT_MODEL = os.getenv("SBERT_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", 100))
 SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", 0.55))
 
