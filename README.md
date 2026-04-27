@@ -32,7 +32,7 @@ euro-cyber-data/
 - **Python 3.11** - Core language
 - **PostgreSQL 15** - Database
 - **Docker & Docker Compose** - Containerization
-- **S-BERT** (sentence-transformers) - Multilingual embeddings
+- **S-BERT** (sentence-transformers) - Embeddings
 - **Flask** - Minimal web dashboard
 
 ## ⚙️ Setup
