@@ -58,44 +58,51 @@ docker-compose ps
 ## Usage
 
 ### Run Scripts Inside Container
-```bash
-# Data exploration
-# Default (full dataset, default sample for language detection 1000)
-docker-compose exec app python src/preprocessing/explore_data.py
 
-# Dataset with personalized sample
+Most preprocessing scripts support the same execution pattern:
+
+- `--run-mode sample` runs on a smaller subset for quick iteration.
+- `--sample-size` controls how many records are used in sample mode.
+- `--run-mode full` runs on the complete dataset.
+- Scripts that do not expose these flags always run on their full/default input.
+
+Use sample mode first when you are checking logic, timings, or output shape. Switch to full mode only when you are ready for the complete pipeline run.
+
+#### Sample-First Commands
+```bash
+# Data exploration on a small subset
 docker-compose exec app python src/preprocessing/explore_data.py --run-mode sample --sample-size 500
 
 # Optional: customize language detection sampling independently
 docker-compose exec app python src/preprocessing/explore_data.py --run-mode sample --sample-size 1000 --language-mode sample --language-sample-size 1000
 
-# Skip language detection entirely
-docker-compose exec app python src/preprocessing/explore_data.py --run-mode sample --sample-size 1000 --language-sample-size 0
-
-# full exploration - might take around 3 hours
-docker-compose exec app python src/preprocessing/explore_data.py --language-mode full
-
-# Generate word clouds (raw data)
-docker-compose exec app python src/visualization/wordclouds.py
-
-# Data preprocessing (full dataset)
-docker-compose exec app python src/preprocessing/preprocess_data.py --run-mode full
-
-# Data preprocessing (quick sample)
+# Data preprocessing
 docker-compose exec app python src/preprocessing/preprocess_data.py --run-mode sample --sample-size 500
 
-# Translation (sample)
+# Translation
 docker-compose exec app python src/preprocessing/translate_preprocessed.py --run-mode sample --sample-size 500
 
-# Translation (full)
+# Load preprocessed job postings into DB
+docker-compose exec app python src/preprocessing/load_preprocessed_to_db.py --run-mode sample --sample-size 500
+```
+
+#### Full-Run Commands
+```bash
+# Full data exploration
+docker-compose exec app python src/preprocessing/explore_data.py --language-mode full
+
+# Generate word clouds (over raw data)
+docker-compose exec app python src/visualization/wordclouds.py
+
+# Data preprocessing
+docker-compose exec app python src/preprocessing/preprocess_data.py --run-mode full
+
+# Translation
 docker-compose exec app python src/preprocessing/translate_preprocessed.py --run-mode full
 
-# Load preprocessed data into DB (full)
+# Load preprocessed data into DB
 docker-compose exec app python src/preprocessing/load_preprocessed_to_db.py
 docker-compose exec app python src/preprocessing/load_ecsf_to_db.py
-
-# Load preprocessed data into DB (sample of job postings)
-docker-compose exec app python src/preprocessing/load_preprocessed_to_db.py --run-mode sample --sample-size 500
 
 # Create extraction tables (job_skill, ecsf_tks_text)
 docker-compose exec app python src/extraction/create_extraction_tables.py
@@ -118,7 +125,7 @@ docker-compose exec app python src/similarity/compute_similarity.py
 # Create mapping view (interpretable results)
 docker-compose exec app python src/mapping/create_mapping_view.py
 
-# Evaluation 
+# Evaluation
 docker-compose exec app python src/similarity/evaluate_similarity.py
 
 # Minimal webapp
@@ -155,5 +162,3 @@ docker-compose down -v
 # Rebuild and restart
 docker-compose up -d
 ```
-
-This is a work in progress. It will be polished and with a friendlier documentation when finished!
