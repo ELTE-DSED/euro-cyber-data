@@ -2,6 +2,8 @@
 
 Dockerized Python pipeline that runs on PostgreSQL, processes job-posting and ECSF data, extracts and maps skills with S-BERT embeddings, evaluates results with similarity metrics, and exposes a minimal Flask webapp for inspection.
 
+This repository is intended exclusively for academic research purposes.
+
 ## 🧱 Project Structure
 
 ```
@@ -54,6 +56,10 @@ docker-compose up -d
 # Check status
 docker-compose ps
 ```
+
+### 3. 📥 Job Postings Dataset Snapshot
+
+To execute the pipeline, download the desired dataset snapshot from [Google Drive](https://drive.google.com/drive/folders/1urAJnf09u8cNFBN0kFm_UZH3Lhh8oBRa), rename it to `job_postings.json`, and place it in `data/raw/`.
 
 ## ▶️ Usage
 
