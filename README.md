@@ -1,6 +1,6 @@
 # Euro Cyber Data - Master Thesis Pipeline
 
-Cybersecurity skills mapping: Job Market → ECSF using S-BERT embeddings
+Dockerized Python pipeline that runs on PostgreSQL, processes job-posting and ECSF data, extracts and maps skills with S-BERT embeddings, evaluates results with similarity metrics, and exposes a minimal Flask webapp for inspection.
 
 ## Project Structure
 
