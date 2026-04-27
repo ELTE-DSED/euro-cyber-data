@@ -12,6 +12,7 @@ import pandas as pd
 from pathlib import Path
 import argparse
 import sys
+import ijson
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -47,6 +48,29 @@ from src.preprocessing.invalid_record_detection import (
     get_all_critical_fields_invalid_mask,
 )
 from src.preprocessing.language_detection import detect_language_distribution, invalid_content_mask
+
+
+def load_json(filepath):
+    """Load JSON file efficiently - uses streaming for large files"""
+    file_size_mb = Path(filepath).stat().st_size / (1024 * 1024)
+    print(f"    ⏳ Loading {Path(filepath).name} ({file_size_mb:.1f} MB) with stream parser...")
+    
+    with open(filepath, 'r', encoding='utf-8') as f:
+        # Peek at first character to determine structure
+        first_char = f.read(1)
+        f.seek(0)
+        
+        if first_char == '[':
+            # Array format - use ijson for memory efficiency
+            parser = ijson.items(f, 'item')
+            data = list(parser)
+        elif first_char == '{':
+            # Dictionary format - load normally 
+            data = json.load(f)
+        else:
+            raise ValueError(f"Unknown JSON format in {filepath}")
+    
+    return data
 
 
 JOB_POSTINGS_COLUMNS_TO_DROP = [
@@ -1217,18 +1241,25 @@ def main():
         return
     
     # Load
-    with open(ecsf_file, 'r', encoding='utf-8') as f:
-        ecsf_data = json.load(f)
+    print("\n  ⏳ Loading ECSF file...")
+    ecsf_data = load_json(ecsf_file)
+    print("  ✅ ECSF loaded")
     
-    with open(job_postings_file, 'r', encoding='utf-8') as f:
-        job_data = json.load(f)
+    print(f"\n  ⏳ Loading job postings file...")
+    job_data = load_json(job_postings_file)
+    print("  ✅ Job postings loaded")
 
     original_job_count = len(job_data)
     job_data = sample_collection(job_data, mode=args.run_mode, sample_size=args.sample_size)
     print(f"  Job postings loaded: {len(job_data)} / {original_job_count}")
     
+    print("\n  ⏳ Preprocessing ECSF...")
     ecsf_preprocessed = preprocess_ecsf(ecsf_data)
+    print("  ✅ ECSF preprocessed")
+    
+    print("\n  ⏳ Preprocessing job postings...")
     job_preprocessed = preprocess_job_postings(job_data)
+    print("  ✅ Job postings preprocessed")
 
     # Save preprocessed data
     save_preprocessed_data(ecsf_preprocessed, 'ecsf_preprocessed.json')

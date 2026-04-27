@@ -9,6 +9,7 @@ import pandas as pd
 from pathlib import Path
 import argparse
 import sys
+import ijson
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -34,9 +35,27 @@ if not LANGDETECT_AVAILABLE:
 
 
 def load_json(filepath):
-    """Load JSON file"""
+    """Load JSON file efficiently - uses streaming for large files"""
+    file_size_mb = Path(filepath).stat().st_size / (1024 * 1024)
+    print(f"  ⏳ Loading {Path(filepath).name} ({file_size_mb:.1f} MB) with streaming...")
+    
     with open(filepath, 'r', encoding='utf-8') as f:
-        return json.load(f)
+        # Peek at first character to determine structure
+        first_char = f.read(1)
+        f.seek(0)
+        
+        if first_char == '[':
+            # Array format - use ijson for memory efficiency
+            print(f"    Detected array format, loading with stream parser...")
+            parser = ijson.items(f, 'item')
+            data = list(parser)
+        elif first_char == '{':
+            # Dictionary format - load normally
+            data = json.load(f)
+        else:
+            raise ValueError(f"Unknown JSON format in {filepath}")
+    
+    return data
 
 
 def inspect_description_markup(
@@ -222,7 +241,9 @@ def explore_job_postings(
     print("JOB POSTINGS DATA EXPLORATION")
     print("=" * 80)
     
+    print("\n  ⏳ Loading job postings file...")
     data = load_json(filepath)
+    print(f"  ✅ Loaded successfully")
     
     # Check if it's a list or dict
     print(f"\n📊 Data type: {type(data).__name__}")
