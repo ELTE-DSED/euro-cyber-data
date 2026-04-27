@@ -31,7 +31,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-euro_cyber_db}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - SBERT_MODEL=${SBERT_MODEL:-paraphrase-multilingual-MiniLM-L12-v2}
+      - SBERT_MODEL=${SBERT_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
     volumes:
       - ./data:/app/data
       - ./src:/app/src
